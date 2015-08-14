@@ -64,12 +64,33 @@ public class ICSwipeActionsTableCell: UITableViewCell {
     
     /// The delegate that will respond to cell action callbacks.
     public var delegate: ICSwipeActionsTableCellDelegate?
-
+  
+    /// Buttons view corner radius, this property is applied to both left and right views. Default value is 0.0 (no rounded corner)
+    public var buttonsViewCornerRadius: CGFloat = 0.0
+  
+    /// Buttons view edge inset, this property is useful to add margin on all sides of the buttons views. Default value is UIEdgeZero (no margin corner)
+    public var buttonsViewEdgeInsets: UIEdgeInsets = UIEdgeInsetsZero
+  
+    /// Layout orientation of the buttons, this property defines if the buttons are stacked horizontally or vertically. `buttonsEqualSize` ans `buttonsSideMargins` have no impact when orientation is Vertical. Default is Horizontal.
+    public var buttonsViewLayoutOrientation: ButtonsViewLayoutOrientationType = .Horizontal
+  
+    /// Front View.
+    @IBOutlet public weak var frontView: UIView? {
+      didSet {
+        _animatableView = frontView!
+      }
+    }
+  
+    public enum ButtonsViewLayoutOrientationType {
+        case Horizontal
+        case Vertical
+    }
+  
     // MARK: - private properties
 
     private var _panRec: UIPanGestureRecognizer?
     private var _tapRec: UITapGestureRecognizer?
-    
+  
     private var _initialContentViewCenter = CGPointZero
     private var _currentContentViewCenter = CGPointZero
     
@@ -85,10 +106,13 @@ public class ICSwipeActionsTableCell: UITableViewCell {
     private var _currentTableView: UITableView?
     private var _currentTableViewOverlay: ICTableViewOvelay?
 
+    private var _animatableView: UIView
+
     // MARK: - NSObject
 
     required public init(coder aDecoder: NSCoder) {
-        super.init(coder: aDecoder)
+        self._animatableView = UIView()
+        super.init(coder: aDecoder)!
         setupEverythigng()
     }
 
@@ -128,6 +152,7 @@ public class ICSwipeActionsTableCell: UITableViewCell {
     // MARK: - UITableViewCell
 
     override init(style: UITableViewCellStyle, reuseIdentifier: String?) {
+        self._animatableView = UIView()
         super.init(style: style, reuseIdentifier: reuseIdentifier)
         setupEverythigng()
     }
@@ -162,7 +187,7 @@ public class ICSwipeActionsTableCell: UITableViewCell {
             }
         }
         
-        self.handleLeftPanGestureChanged(panRec)
+        self.handlePanGestureChanged(panRec)
         
         if (panRec.state == .Ended) {
             self.handlePanGestureEnded(panRec, velocity: velocity)
@@ -189,6 +214,7 @@ public class ICSwipeActionsTableCell: UITableViewCell {
     // MARK: - Setup
 
     private func setupEverythigng() {
+        _animatableView = contentView
         self.addPanGestureRecognizer()
     }
     
@@ -220,28 +246,24 @@ public class ICSwipeActionsTableCell: UITableViewCell {
     // MARK: - Button views
 
     private func addLeftButtonsView() {
-        if (_leftButtonsView != nil) {
-            removeLeftButtonsView()
-        }
-        if leftButtonsTitles.count > 0 {
+        if leftButtonsTitles.count > 0 && _leftButtonsView == nil {
             _leftButtonsView = prepareButtonsView(leftButtonsTitles)
             _leftButtonsViewWidth = _leftButtonsView!.frame.size.width
             _leftButtonsView?.frame = CGRectMake(-_leftButtonsViewWidth, 0, _leftButtonsViewWidth, self.contentView.frame.size.height)
+            _leftButtonsView?.frame = self.addEdgesFromFrame(_leftButtonsView?.frame)
             _leftButtonsView?.autoresizingMask = [.FlexibleWidth, .FlexibleHeight]
             self.contentView.addSubview(_leftButtonsView!)
         }
     }
     
     private func addRightButtonsView() {
-        if (_rightButtonsView != nil) {
-            removeRightButtonsView()
-        }
-        if rightButtonsTitles.count > 0 {
+        if rightButtonsTitles.count > 0 && _rightButtonsView == nil {
             _rightButtonsView = prepareButtonsView(rightButtonsTitles)
             _rightButtonsViewWidth = _rightButtonsView!.frame.size.width
-            _rightButtonsView?.frame = CGRectMake(self.contentView.frame.size.width, 0, _rightButtonsViewWidth, self.contentView.frame.size.height)
+            _rightButtonsView?.frame = CGRectMake(self.contentView.frame.size.width-(_rightButtonsView?.frame.size.width)!, 0, _rightButtonsViewWidth, self.contentView.frame.size.height)
+            _rightButtonsView?.frame = self.addEdgesFromFrame(_rightButtonsView?.frame)
             _rightButtonsView?.autoresizingMask = [.FlexibleWidth, .FlexibleHeight]
-            self.contentView.addSubview(_rightButtonsView!)
+            self.contentView.insertSubview(_rightButtonsView!, atIndex: 0)
         }
     }
     
@@ -255,28 +277,53 @@ public class ICSwipeActionsTableCell: UITableViewCell {
     private func prepareButtonsView(buttonsTitles: [Any]) -> UIView {
         if buttonsTitles.count > 0 {
             let view = UIView(frame: CGRectMake(0, 0, 0, self.contentView.frame.size.height))
-            var maxButtonsWidth: CGFloat = 0
+            if self.buttonsViewLayoutOrientation == .Vertical {
+                view.frame = CGRectMake(0, 0, self.contentView.frame.size.width/2, 0)
+            }
+            view.layer.cornerRadius = self.buttonsViewCornerRadius
+            view.clipsToBounds = true
+          
+            var maxButtonsSize: CGFloat = 0
             
             for buttonProperty in buttonsTitles {
                 let button = self.createButtonWith(buttonProperty)
-                button.frame = CGRectMake(view.frame.size.width, 0, button.frame.size.width + 2 * buttonsSideMargins, view.frame.size.height)
-                view.frame = CGRectMake(0, 0, view.frame.size.width + button.frame.width, view.frame.size.height)
-                view.addSubview(button)
-                maxButtonsWidth = max(maxButtonsWidth, button.frame.width)
+              
+                if self.buttonsViewLayoutOrientation == .Horizontal {
+                    button.frame = CGRectMake(view.frame.size.width, 0, button.frame.size.width + 2 * buttonsSideMargins, view.frame.size.height)
+                    view.frame = CGRectMake(0, 0, view.frame.size.width + button.frame.width, view.frame.size.height)
+                    view.addSubview(button)
+                    maxButtonsSize = max(maxButtonsSize, button.frame.width)
+                } else {
+                    button.frame = CGRectMake(0, view.frame.size.height, view.frame.size.width, self.contentView.frame.size.height / CGFloat(buttonsTitles.count))
+                    view.frame = CGRectMake(0, 0, view.frame.size.width, view.frame.size.height + button.frame.height)
+                    view.addSubview(button)
+                    maxButtonsSize = max(maxButtonsSize, button.frame.height)
+                }
             }
-            if buttonsEqualSize {
-                view.frame = CGRectMake(0, 0, maxButtonsWidth * CGFloat(buttonsTitles.count), view.frame.size.height)
+            if buttonsEqualSize && self.buttonsViewLayoutOrientation == .Horizontal {
+                view.frame = CGRectMake(0, 0, maxButtonsSize * CGFloat(buttonsTitles.count), view.frame.size.height)
                 var currentX: CGFloat = 0
                 for button in view.subviews {
-                    button.frame = CGRectMake(currentX, 0, maxButtonsWidth, view.frame.size.height)
-                    currentX += maxButtonsWidth
+                    button.frame = CGRectMake(currentX, 0, maxButtonsSize, view.frame.size.height)
+                    currentX += maxButtonsSize
                 }
             }
             return view
         }
         return UIView()
     }
-    
+
+    private func addEdgesFromFrame (frame: CGRect?) -> CGRect {
+        if let frame_ = frame {
+            return CGRectMake(frame_.origin.x + self.buttonsViewEdgeInsets.left,
+                              frame_.origin.y + self.buttonsViewEdgeInsets.top,
+                              frame_.size.width - self.buttonsViewEdgeInsets.left - self.buttonsViewEdgeInsets.right,
+                              frame_.size.height - self.buttonsViewEdgeInsets.top - self.buttonsViewEdgeInsets.bottom)
+        } else {
+            return CGRectZero
+        }
+    }
+
     private func createButtonWith(buttonProperty: Any) -> UIButton {
         let buttonFullProperties = self.buttonsPropertiesFromObject(buttonProperty)
         let button = UIButton(type: .Custom)
@@ -332,25 +379,26 @@ public class ICSwipeActionsTableCell: UITableViewCell {
     }
     
     private func hideButtonsAnimated(animated: Bool, velocity: CGPoint) {
-        if ( !_buttonsAreHiding) {
-            let newContentViewCenter = CGPointMake(_initialContentViewCenter.x, self.contentView.center.y)
+        if !_buttonsAreHiding {
+            let newContentViewCenter = CGPointMake(self.contentView.center.x, self.contentView.center.y)
             _currentContentViewCenter = newContentViewCenter
             _rightSwipeExpanded = false
             _leftSwipeExpanded = false
             _buttonsAreHiding = true
             removeTableOverlay()
             
-            func completition() {
+            func completion() {
                 self.removeLeftButtonsView()
                 self.removeRightButtonsView()
                 self.restoreTableSelection()
                 self.removeTapGestureRecognizer()
+                self._initialContentViewCenter = self._animatableView.center
             }
             
             if animated {
                 var hideAnimationDuration = animationDuration
                 if velocity != CGPointZero {
-                    let currentDelta: Double = Double(_initialContentViewCenter.x) - Double(self.contentView.center.x)
+                    let currentDelta: Double = Double(_initialContentViewCenter.x) - Double(self._animatableView.center.x)
                     let xVelocity: Double = Double(velocity.x)
                     hideAnimationDuration = currentDelta / xVelocity
                     if hideAnimationDuration < 0.0 || hideAnimationDuration > animationDuration {
@@ -358,13 +406,13 @@ public class ICSwipeActionsTableCell: UITableViewCell {
                     }
                 }
                 UIView.animateWithDuration(hideAnimationDuration, delay: 0, options: .CurveEaseInOut, animations: { () -> Void in
-                    self.contentView.center = newContentViewCenter
+                    self._animatableView.center = newContentViewCenter
                     }) { (completed) -> Void in
-                        completition()
+                        completion()
                 }
             } else {
-                self.contentView.center = newContentViewCenter
-                completition()
+                self._animatableView.center = newContentViewCenter
+                completion()
             }
         }
     }
@@ -373,24 +421,16 @@ public class ICSwipeActionsTableCell: UITableViewCell {
     // MARK: - GestureHandlers
 
     private func handleLeftPanGestureBegan() {
-        if _leftSwipeExpanded {
-            
-        } else {
-            if rightButtonsTitles.count > 0 {
-                addButtonViews()
-                _rightSwipeExpanded = true
-            }
+        if !_rightSwipeExpanded && rightButtonsTitles.count > 0 {
+            addButtonViews()
+            _rightSwipeExpanded = true
         }
     }
     
     private func handleRightPanGestureBegan() {
-        if _rightSwipeExpanded {
-            
-        } else {
-            if leftButtonsTitles.count > 0 {
-                addButtonViews()
-                _leftSwipeExpanded = true
-            }
+        if !_leftSwipeExpanded && leftButtonsTitles.count > 0 {
+            addButtonViews()
+            _leftSwipeExpanded = true
         }
     }
     
@@ -421,32 +461,32 @@ public class ICSwipeActionsTableCell: UITableViewCell {
             self.addTableOverlay()
 
             UIView.animateWithDuration(animationDuration, delay: 0, options: .CurveEaseInOut, animations: { () -> Void in
-                self.contentView.center = newContentViewCenter
-                }) { (completed) -> Void in
-            }
+                self._animatableView.center = newContentViewCenter
+                },  completion: { (Bool) -> Void in
+                self._initialContentViewCenter = self._animatableView.center
+            })
         }
     }
     
-    private func handleLeftPanGestureChanged(panRec: UIPanGestureRecognizer) {
+    private func handlePanGestureChanged(panRec: UIPanGestureRecognizer) {
         let translation = panRec.translationInView(self)
         
-        let newCenter = CGPointMake(self.contentView.center.x + translation.x, self.contentView.center.y)
-        let panIsWithinRightMotionRange = (_initialContentViewCenter.x - newCenter.x) < _rightButtonsViewWidth
-        let panIsWithinLeftMotionRange = (newCenter.x - _initialContentViewCenter.x) < _leftButtonsViewWidth
+        let newCenter = CGPointMake(_initialContentViewCenter.x + translation.x, _animatableView.center.y)
+        let panIsWithinRightMotionRange = (contentView.center.x - newCenter.x) < _rightButtonsViewWidth
+        let panIsWithinLeftMotionRange = (newCenter.x - contentView.center.x) < _leftButtonsViewWidth
         if (panIsWithinLeftMotionRange && panIsWithinRightMotionRange) { // no more then buttons width
-            self.contentView.center = newCenter
+            self._animatableView.center = newCenter
             _currentContentViewCenter = newCenter
-            if _leftSwipeExpanded && (newCenter.x - _initialContentViewCenter.x) < 0 { // view changed from left to right expansion
+            if _leftSwipeExpanded && (newCenter.x - _animatableView.center.x) < 0 { // view changed from left to right expansion
                 _leftSwipeExpanded = false
                 _rightSwipeExpanded = true
-            } else if _rightSwipeExpanded && ( _initialContentViewCenter.x - newCenter.x) < 0 {
+            } else if _rightSwipeExpanded && ( _animatableView.center.x - newCenter.x) < 0 {
                 _rightSwipeExpanded = false
                 _leftSwipeExpanded = true
             }
         }
-        panRec.setTranslation(CGPointZero, inView: self)
     }
-    
+  
     public override func gestureRecognizerShouldBegin(gestureRecognizer: UIGestureRecognizer) -> Bool {
         if (gestureRecognizer == _panRec) {
             
@@ -503,7 +543,7 @@ public class ICSwipeActionsTableCell: UITableViewCell {
         }
 
         required init(coder aDecoder: NSCoder) {
-            super.init(coder: aDecoder)
+            super.init(coder: aDecoder)!
         }
         
         override func hitTest(point: CGPoint, withEvent event: UIEvent?) -> UIView? {
